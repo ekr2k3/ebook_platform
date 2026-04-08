@@ -45,8 +45,8 @@ public class Ebook {
     @Column(name = "file_url", length = 500)
     private String fileUrl;
 
-    @Column(name = "drive_file_id", length = 255)
-    private String driveFileId;
+    // @Column(name = "drive_file_id", length = 255)
+    // private String driveFileId;
 
     @Column(name = "cover_url", length = 500)
     private String coverUrl;

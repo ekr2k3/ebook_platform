@@ -44,8 +44,10 @@
         }
 
         input[type="text"],
+        input[type="number"],
         textarea,
-        input[type="file"] {
+        input[type="file"],
+        select {
             width: 100%;
             padding: 12px;
             border: 1px solid #dcdde1;
@@ -95,6 +97,27 @@
             margin-top: 6px;
         }
 
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            transform: scale(1.1);
+        }
+
+        .cover-preview {
+            margin-top: 10px;
+            max-width: 160px;
+            max-height: 220px;
+            display: none;
+            border-radius: 8px;
+            border: 1px solid #dcdde1;
+            object-fit: cover;
+        }
+
         .actions {
             display: flex;
             gap: 12px;
@@ -132,13 +155,18 @@
 <div class="container">
     <h1>Đăng ebook</h1>
 
-    <!-- Thông báo thành công -->
-    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+    <div th:if="${successMessage != null}" class="alert alert-success">
+        <span th:text="${successMessage}"></span>
+    </div>
 
-    <!-- Thông báo lỗi chung -->
-    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+    <div th:if="${errorMessage != null}" class="alert alert-error">
+        <span th:text="${errorMessage}"></span>
+    </div>
 
-    <form th:action="@{/seller/ebooks/upload}" th:object="${ebookUploadRequest}" method="post" enctype="multipart/form-data">
+    <form th:action="@{/seller/ebooks/upload}"
+          th:object="${form}"
+          method="post"
+          enctype="multipart/form-data">
 
         <div class="form-group">
             <label for="title">Tên sách</label>
@@ -154,17 +182,56 @@
 
         <div class="form-group">
             <label for="description">Mô tả</label>
-            <textarea id="description" th:field="*{description}" placeholder="Nhập mô tả ebook"></textarea>
+            <textarea id="description"
+                      th:field="*{description}"
+                      placeholder="Nhập mô tả ebook"></textarea>
             <div class="field-error" th:if="${#fields.hasErrors('description')}" th:errors="*{description}"></div>
         </div>
 
         <div class="form-group">
             <label for="file">File ebook</label>
-            <input type="file" id="file" name="file" accept=".pdf,.epub">
+            <input type="file" id="file" th:field="*{file}" accept=".pdf,.epub">
             <div class="hint">Chỉ chấp nhận file PDF hoặc EPUB.</div>
             <div id="selectedFileName" class="file-name">Chưa chọn file</div>
+            <div class="field-error" th:if="${#fields.hasErrors('file')}" th:errors="*{file}"></div>
+        </div>
 
-            <div class="field-error" th:if="${fileError}" th:text="${fileError}"></div>
+        <div class="form-group">
+            <label for="coverUrl">Ảnh bìa</label>
+            <input type="file" id="coverUrl" th:field="*{coverUrl}" accept="image/*">
+            <div class="hint">Chấp nhận JPG, PNG, WEBP...</div>
+            <div id="selectedName" class="file-name">Chưa chọn ảnh bìa</div>
+            <img id="coverPreview" class="cover-preview" alt="Preview ảnh bìa">
+            <div class="field-error" th:if="${#fields.hasErrors('coverUrl')}" th:errors="*{coverUrl}"></div>
+        </div>
+
+        <div class="form-group">
+            <label for="totalPages">Tổng số trang</label>
+            <input type="number" id="totalPages" th:field="*{totalPages}" min="1" placeholder="Ví dụ: 250">
+            <div class="hint">Có thể cho người bán nhập tay hoặc backend tự tính lại khi xử lý file PDF.</div>
+            <div class="field-error" th:if="${#fields.hasErrors('totalPages')}" th:errors="*{totalPages}"></div>
+        </div>
+
+        <div class="form-group">
+            <label for="status">Trạng thái</label>
+            <select id="status" th:field="*{status}">
+                <option value="">-- Chọn trạng thái --</option>
+                <option value="DRAFT">Nháp</option>
+                <option value="PUBLISHED">Xuất bản</option>
+            </select>
+            <div class="field-error" th:if="${#fields.hasErrors('status')}" th:errors="*{status}"></div>
+        </div>
+
+        <div class="form-group">
+            <label>Cho phép preview</label>
+            <div class="checkbox-group">
+                <input type="checkbox" id="previewable" th:field="*{previewable}">
+                <label for="previewable" style="margin-bottom: 0; font-weight: 400;">
+                    Ebook này có thể xem trước
+                </label>
+            </div>
+            <div class="hint">Checked = true, bỏ chọn = false</div>
+            <div class="field-error" th:if="${#fields.hasErrors('previewable')}" th:errors="*{previewable}"></div>
         </div>
 
         <div class="actions">
@@ -178,13 +245,39 @@
     const fileInput = document.getElementById('file');
     const selectedFileName = document.getElementById('selectedFileName');
 
-    fileInput.addEventListener('change', function () {
-        if (this.files && this.files.length > 0) {
-            selectedFileName.textContent = 'Đã chọn: ' + this.files[0].name;
-        } else {
-            selectedFileName.textContent = 'Chưa chọn file';
-        }
-    });
+    if (fileInput && selectedFileName) {
+        fileInput.addEventListener('change', function () {
+            if (this.files && this.files.length > 0) {
+                selectedFileName.textContent = 'Đã chọn: ' + this.files[0].name;
+            } else {
+                selectedFileName.textContent = 'Chưa chọn file';
+            }
+        });
+    }
+
+    const coverInput = document.getElementById('coverFile');
+    const selectedCoverFileName = document.getElementById('selectedCoverFileName');
+    const coverPreview = document.getElementById('coverPreview');
+
+    if (coverInput && selectedCoverFileName && coverPreview) {
+        coverInput.addEventListener('change', function () {
+            if (this.files && this.files.length > 0) {
+                const file = this.files[0];
+                selectedCoverFileName.textContent = 'Đã chọn: ' + file.name;
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    coverPreview.src = e.target.result;
+                    coverPreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                selectedCoverFileName.textContent = 'Chưa chọn ảnh bìa';
+                coverPreview.src = '';
+                coverPreview.style.display = 'none';
+            }
+        });
+    }
 </script>
 </body>
 </html>

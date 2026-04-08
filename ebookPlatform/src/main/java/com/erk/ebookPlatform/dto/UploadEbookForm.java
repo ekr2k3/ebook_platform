@@ -1,12 +1,12 @@
 package com.erk.ebookPlatform.dto;
 
-import com.erk.ebookPlatform.enums.EbookFormat;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.web.multipart.MultipartFile;
+
 
 @Getter
 @Setter
@@ -22,11 +22,17 @@ public class UploadEbookForm {
     private String description;
 
     @NotNull
-    private EbookFormat format;
-
-    @NotNull
-    private Long sellerId;
-
-    @NotNull
     private MultipartFile file;
+
+    @NotNull
+    private String status;
+
+    @NotNull
+    private MultipartFile coverUrl;
+
+    @NotNull
+    private Boolean previewable;
+
+    @NotNull
+    private Integer totalPages;
 }

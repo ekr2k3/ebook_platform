@@ -1,79 +1,92 @@
 package com.erk.ebookPlatform.service;
 
+import java.io.IOException;
+import java.util.Map;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import com.erk.ebookPlatform.dto.UploadEbookForm;
 import com.erk.ebookPlatform.entity.Ebook;
 import com.erk.ebookPlatform.entity.User;
+import com.erk.ebookPlatform.enums.EbookFormat;
 import com.erk.ebookPlatform.enums.EbookStatus;
-import com.erk.ebookPlatform.enums.Role;
+import com.erk.ebookPlatform.enums.SourceType;
 import com.erk.ebookPlatform.repository.EbookRepository;
 import com.erk.ebookPlatform.repository.UserRepository;
-import com.erk.ebookPlatform.service.storage.FileStorageService;
-import jakarta.transaction.Transactional;
-import lombok.RequiredArgsConstructor;
+
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
+
+
 
 @Service
-@RequiredArgsConstructor
 public class EbookService {
 
-    private static final long MAX_FILE_SIZE = 50L * 1024 * 1024; // 50 MB
-
+    private final CloudinaryService cloudinaryService;
     private final EbookRepository ebookRepository;
     private final UserRepository userRepository;
-    private final FileStorageService fileStorageService;
 
-    @Transactional
-    public Ebook uploadEbook(UploadEbookForm form) {
-        User seller = userRepository.findById(form.getSellerId())
-                .orElseThrow(() -> new IllegalArgumentException("Seller not found"));
-
-        if (seller.getRole() != Role.SELLER) {
-            throw new IllegalArgumentException("Only users with SELLER role can upload ebooks");
-        }
-
-        var file = form.getFile();
-        validateFile(file);
-
-        String storedPath = fileStorageService.store(file);
-
-        Ebook ebook = new Ebook();
-        ebook.setTitle(form.getTitle());
-        ebook.setAuthor(form.getAuthor());
-        ebook.setDescription(form.getDescription());
-        ebook.setFormat(form.getFormat());
-        ebook.setSeller(seller);
-        ebook.setFileName(StringUtils.cleanPath(file.getOriginalFilename()));
-        ebook.setFileUrl(storedPath);
-        ebook.setDriveFileId(storedPath);
-        ebook.setFileSize(file.getSize());
-        ebook.setPreviewable(true);
-        ebook.setStatus(EbookStatus.DRAFT);
-
-        return ebookRepository.save(ebook);
+    public EbookService(CloudinaryService cloudinaryService, // dùng constructor để inject or dùng @Autowired
+                        EbookRepository ebookRepository,
+                        UserRepository userRepository) {
+        this.cloudinaryService = cloudinaryService;
+        this.ebookRepository = ebookRepository;
+        this.userRepository = userRepository;
     }
 
-    private void validateFile(org.springframework.web.multipart.MultipartFile file) {
+    public void uploadEbook(UploadEbookForm form) {
+        MultipartFile file = form.getFile();
+        MultipartFile coverFile = form.getCoverUrl();
+
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("Please upload a PDF or EPUB file");
+            throw new IllegalArgumentException("File ebook không được để trống");
         }
 
-        if (file.getSize() > MAX_FILE_SIZE) {
-            throw new IllegalArgumentException("File exceeds maximum allowed size of 50 MB");
+        if (coverFile == null || coverFile.isEmpty()) {
+            throw new IllegalArgumentException("Ảnh bìa không được để trống");
         }
 
-        String filename = StringUtils.cleanPath(file.getOriginalFilename());
-        String extension = getExtension(filename).toLowerCase();
-        if (!extension.equals("pdf") && !extension.equals("epub")) {
-            throw new IllegalArgumentException("Only PDF and EPUB formats are accepted");
-        }
-    }
+        User seller = userRepository.findByEmail("seller01@example.com")
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy seller"));
 
-    private String getExtension(String filename) {
-        int index = filename.lastIndexOf('.');
-        if (index == -1) {
-            return "";
+        try {
+            Map<String, Object> uploadResult = cloudinaryService.uploadFile(file);
+            Map<String, Object> coverUploadResult = cloudinaryService.uploadFile(coverFile);
+
+            Ebook ebook = new Ebook();
+            ebook.setSeller(seller); 
+
+
+            ebook.setTitle(form.getTitle());
+            ebook.setAuthor(form.getAuthor());
+            ebook.setDescription(form.getDescription());
+            ebook.setTotalPages(form.getTotalPages());
+            ebook.setPreviewable(Boolean.TRUE.equals(form.getPreviewable()));
+
+            ebook.setStatus(EbookStatus.valueOf(form.getStatus().toUpperCase()));
+            ebook.setFormat(EbookFormat.valueOf(((String) uploadResult.get("format")).toUpperCase()));
+
+            Object bytesObj = uploadResult.get("bytes");
+            if (bytesObj instanceof Number number) {
+                ebook.setFileSize(number.longValue());
+            }
+
+            ebook.setFileName(file.getOriginalFilename());
+            ebook.setFileUrl((String) uploadResult.get("secure_url"));
+            ebook.setCoverUrl((String) coverUploadResult.get("secure_url"));
+
+            ebookRepository.save(ebook);
+
+            System.out.println("Ebook URL: " + ebook.getFileUrl() + " - logs from EbookService");
+        } catch (IOException e) {
+            System.err.println("Lỗi upload file lên Cloudinary: " + e.getMessage());
+            throw new RuntimeException("Failed to upload ebook", e);
+        } catch (IllegalArgumentException e) {
+            System.err.println("Dữ liệu không hợp lệ: " + e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            System.err.println("Lỗi không xác định khi upload ebook: " + e.getMessage());
+            throw new RuntimeException("Unexpected error while uploading ebook", e);
         }
-        return filename.substring(index + 1);
     }
 }
